@@ -1,112 +1,111 @@
 --[[
-    VORTEX HUB - BYPASS MODULE (MÓDULO 4: ANTI-CHEAT & SEGURANÇA)
+    VORTEX HUB - CLIENT SAFETY MODULE
     Arquivo: bypass.lua
-    Descrição:Hooks de metatable, bypassing de verificações de física/velocidade e desativação de logs locais.
+
+    Mantém apenas funcionalidades locais e compatíveis
+    com a API normal do Roblox.
 --]]
 
 local BypassModule = {}
 
 --========================================================--
--- 1. SERVIÇOS E VARIÁVEIS LOCAIS
+-- SERVIÇOS
 --========================================================--
 
 local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
 
+--========================================================--
+-- CONFIGURAÇÃO
+--========================================================--
+
 BypassModule.Config = {
-    AntiBanish = true,
-    NoClipOverride = true,
-    SpeedBypass = true
+    NoFallStates = true,
+    DisableRagdollStates = true
 }
 
--- Safe table para armazenar metétodos originais
-local RawMeta = getrawmetatable or debug.getmetatable or function() return {} end
-local SetReadOnly = setreadonly or make_writeable or function() end
-
 --========================================================--
--- 2. HOOKS DE METATABLE & ANULAÇÃO DE CHECAGENS
+-- PERSONAGEM
 --========================================================--
 
-function BypassModule.InitMetaHooks()
-    local gmt = RawMeta(game)
-    if not gmt then return end
+local Character = LocalPlayer.Character
 
-    SetReadOnly(gmt, false)
+local function UpdateCharacter(character)
+    Character = character
+end
 
-    local oldNamecall = gmt.__namecall
-    local oldIndex = gmt.__index
+if not Character then
+    Character = LocalPlayer.CharacterAdded:Wait()
+end
 
-    -- Proteção contra detecções enviadas via RemoteEvent (Ban/Kick remotos maliciosos)
-    if oldNamecall then
-        gmt.__namecall = newcclosure(function(self, ...)
-            local method = getnamecallmethod()
-            local args = {...}
+LocalPlayer.CharacterAdded:Connect(UpdateCharacter)
 
-            if method == "FireServer" or method == "InvokeServer" then
-                local remoteName = tostring(self.Name):lower()
-                
-                -- Intercepta remotes comuns de checagem do servidor
-                if remoteName:find("ban") 
-                   or remoteName:find("cheat") 
-                   or remoteName:find("detection") 
-                   or remoteName:find("kick") then
-                    return nil
-                end
-            end
+--========================================================--
+-- HUMANOID
+--========================================================--
 
-            return oldNamecall(self, ...)
+local function GetHumanoid()
+    if not Character then
+        return nil
+    end
+
+    return Character:FindFirstChildOfClass("Humanoid")
+end
+
+--========================================================--
+-- ESTADOS DE MOVIMENTO
+--========================================================--
+
+function BypassModule.ApplyCharacterSafety()
+    local humanoid = GetHumanoid()
+
+    if not humanoid then
+        return false
+    end
+
+    if BypassModule.Config.NoFallStates then
+        pcall(function()
+            humanoid:SetStateEnabled(
+                Enum.HumanoidStateType.FallingDown,
+                false
+            )
         end)
     end
 
-    SetReadOnly(gmt, true)
-end
-
---========================================================--
--- 3. DESATIVAÇÃO DE SCRIPTS LOCAIS MALICIOSOS (ANTI-CHEATS LOCAIS)
---========================================================--
-
-function BypassModule.DisableLocalAntiCheats()
-    pcall(function()
-        local PlayerScripts = LocalPlayer:WaitForChild("PlayerScripts", 3)
-        if PlayerScripts then
-            for _, script in ipairs(PlayerScripts:GetChildren()) do
-                if script:IsA("LocalScript") then
-                    local name = script.Name:lower()
-                    if name:find("anticheat") or name:find("detector") or name:find("ac") then
-                        script.Disabled = true
-                    end
-                end
-            end
-        end
-    end)
-end
-
---========================================================--
--- 4. BYPASS DE QUEDA E COLISÃO (NOCLIP PERMANENTE INTEGRADO)
---========================================================--
-
-function BypassModule.EnableNoFallDamage()
-    local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local Humanoid = Character:FindFirstChildOfClass("Humanoid")
-
-    if Humanoid then
-        Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-        Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+    if BypassModule.Config.DisableRagdollStates then
+        pcall(function()
+            humanoid:SetStateEnabled(
+                Enum.HumanoidStateType.Ragdoll,
+                false
+            )
+        end)
     end
+
+    return true
 end
 
 --========================================================--
--- 5. INICIALIZADOR DO MÓDULO
+-- REAPLICAR APÓS RESPAWN
+--========================================================--
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    BypassModule.ApplyCharacterSafety()
+end)
+
+--========================================================--
+-- INICIALIZAÇÃO
 --========================================================--
 
 function BypassModule.ApplyAll()
-    BypassModule.InitMetaHooks()
-    BypassModule.DisableLocalAntiCheats()
-    BypassModule.EnableNoFallDamage()
-    print("[Vortex Bypass] Proteções de Anti-Cheat aplicadas!")
+    local success = BypassModule.ApplyCharacterSafety()
+
+    if success then
+        print("[Vortex Client] Proteções locais aplicadas.")
+    else
+        warn("[Vortex Client] Humanoid não encontrado.")
+    end
 end
 
 BypassModule.ApplyAll()
