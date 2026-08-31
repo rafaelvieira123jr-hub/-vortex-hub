@@ -60,17 +60,31 @@ local function LoadModule(moduleName)
         warn(
             "[Vortex Hub Error] Resposta inválida para "
             .. moduleName
+            .. " - Tipo: "
+            .. type(response)
         )
         return nil
     end
 
-    if #response <= 10 or response == "404: Not Found" then
+    -- Validação melhorada: verifica se a resposta é realmente vazia ou erro
+    local trimmedResponse = response:gsub("^%s+", ""):gsub("%s+$", "")
+    
+    if #trimmedResponse == 0 or trimmedResponse == "404: Not Found" then
         warn(
-            "[Vortex Hub Error] Arquivo não encontrado: "
+            "[Vortex Hub Error] Arquivo não encontrado ou vazio: "
             .. moduleName
+            .. " (tamanho: " .. tostring(#response) .. ")"
         )
         return nil
     end
+
+    print(
+        "[Vortex Hub] Tamanho de "
+        .. moduleName
+        .. ": "
+        .. tostring(#response)
+        .. " bytes"
+    )
 
     local codeFunction, compileErr =
         loadstring(response)
