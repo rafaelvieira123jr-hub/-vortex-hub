@@ -1,6 +1,7 @@
 --[[
-    VORTEX HUB - INTERFACE FRAMEWORK (MÓDULO 1: COMPLETO)
-    Compatível com Executores Mobile e PC
+    VORTEX HUB - INTERFACE FRAMEWORK (MÓDULO 1: MAIN COMPLETO E INTEGRADO)
+    Arquivo: main.lua
+    Descrição: Framework de interface responsiva (Mobile/PC) e ponte de comunicação com os módulos de lógica.
 --]]
 
 --========================================================--
@@ -40,6 +41,14 @@ _G.VortexCleanUp = function()
     end
     table.clear(Connections)
 end
+
+-- Tabela principal que será retornada para o loader
+local MainModule = {}
+local LoadedModules = {
+    Farm = nil,
+    Combat = nil,
+    Bypass = nil
+}
 
 --========================================================--
 -- 2. CONFIGURAÇÃO DE TEMA E ESTADO
@@ -582,7 +591,7 @@ local function CreateSlider(parent, pageName, text, min, max, default, callback)
 end
 
 --========================================================--
--- 6. TODAS AS ABAS E COMPONENTES MAPEADOS
+-- 6. TODAS AS ABAS E COMPONENTES MAPEADOS (COM CONEXÃO DIRETA DE LÓGICA)
 --========================================================--
 
 local HomePage = CreatePage("Home")
@@ -600,94 +609,119 @@ CreateTab("Settings", "⚙️", SettingsPage)
 --- ABA: HOME ---
 CreateSection(HomePage, "Informações do Servidor")
 CreateButton(HomePage, "Home", "Checar Ping & FPS", function()
-    print("[Vortex] FPS:", math.floor(workspace:GetRealPhysicsFPS()))
+    local fps = math.floor(workspace:GetRealPhysicsFPS())
+    print("[Vortex Hub] Desempenho Atual - FPS:", fps)
 end)
 CreateButton(HomePage, "Home", "Copiar Link do Servidor", function()
-    print("[Vortex] Link do Servidor Copiado.")
+    if setclipboard then
+        setclipboard("https://www.roblox.com/games/" .. tostring(game.PlaceId))
+        print("[Vortex Hub] Link copiado para a área de transferência!")
+    end
 end)
 CreateButton(HomePage, "Home", "Reentrar no Servidor (Rejoin)", function()
-    print("[Vortex] Reentrar acionado.")
+    game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
 end)
 
 --- ABA: FARM ---
 CreateSection(FarmPage, "Automação de Level e Quests")
 CreateToggle(FarmPage, "Farm", "Auto Farm Quest", false, function(v)
-    print("[Vortex] Auto Farm Quest:", v)
+    if LoadedModules.Farm then
+        LoadedModules.Farm.SetFarmState(v)
+    end
 end)
 CreateToggle(FarmPage, "Farm", "Auto Aceitar Quest", false, function(v)
-    print("[Vortex] Auto Quest:", v)
+    if LoadedModules.Farm then
+        LoadedModules.Farm.Config.AutoQuest = v
+    end
 end)
 CreateSlider(FarmPage, "Farm", "Distância do Alvo", 3, 20, 9, function(v)
-    print("[Vortex] Distância:", v)
+    if LoadedModules.Farm then
+        LoadedModules.Farm.Config.Distance = v
+    end
 end)
 
 CreateSection(FarmPage, "Automação de Chefes e Eventos")
 CreateToggle(FarmPage, "Farm", "Auto Farm Bosses", false, function(v)
-    print("[Vortex] Auto Boss:", v)
-end)
-CreateToggle(FarmPage, "Farm", "Auto Coletar Orbs / Drops", false, function(v)
-    print("[Vortex] Auto Orbs:", v)
+    if LoadedModules.Farm then
+        LoadedModules.Farm.Config.FarmBosses = v
+    end
 end)
 
 --- ABA: COMBAT ---
 CreateSection(CombatPage, "Combate Automático")
 CreateToggle(CombatPage, "Combat", "Auto Click / Attack", false, function(v)
-    print("[Vortex] Auto Click:", v)
+    if LoadedModules.Combat then
+        LoadedModules.Combat.SetAutoClick(v)
+    end
 end)
 CreateToggle(CombatPage, "Combat", "Auto Equipar Arma", false, function(v)
-    print("[Vortex] Auto Equip:", v)
+    if LoadedModules.Combat then
+        LoadedModules.Combat.SetAutoEquip(v)
+    end
 end)
 
 CreateSection(CombatPage, "Habilidades Automáticas")
 CreateToggle(CombatPage, "Combat", "Usar Skill [Z]", false, function(v)
-    print("[Vortex] Skill Z:", v)
+    if LoadedModules.Combat then
+        LoadedModules.Combat.SetSkillState("Z", v)
+    end
 end)
 CreateToggle(CombatPage, "Combat", "Usar Skill [X]", false, function(v)
-    print("[Vortex] Skill X:", v)
+    if LoadedModules.Combat then
+        LoadedModules.Combat.SetSkillState("X", v)
+    end
 end)
 CreateToggle(CombatPage, "Combat", "Usar Skill [C]", false, function(v)
-    print("[Vortex] Skill C:", v)
+    if LoadedModules.Combat then
+        LoadedModules.Combat.SetSkillState("C", v)
+    end
 end)
 CreateToggle(CombatPage, "Combat", "Usar Skill [V]", false, function(v)
-    print("[Vortex] Skill V:", v)
+    if LoadedModules.Combat then
+        LoadedModules.Combat.SetSkillState("V", v)
+    end
 end)
 
 --- ABA: TELEPORT ---
 CreateSection(TeleportPage, "Teleporte de Ilhas")
+local function TeleportToCFrame(cf)
+    if LoadedModules.Farm then
+        LoadedModules.Farm.MoveToCFrame(cf)
+    else
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then root.CFrame = cf end
+    end
+end
+
 CreateButton(TeleportPage, "Teleport", "Ilha Iniciar (Floppa Island)", function()
-    print("[Vortex] Teleporte: Floppa Island")
+    TeleportToCFrame(CFrame.new(-611, 15, -2174))
 end)
 CreateButton(TeleportPage, "Teleport", "Ilha Popcat", function()
-    print("[Vortex] Teleporte: Popcat Island")
+    TeleportToCFrame(CFrame.new(-1230, 15, -3150))
 end)
 CreateButton(TeleportPage, "Teleport", "Ilha Cheems", function()
-    print("[Vortex] Teleporte: Cheems Island")
+    TeleportToCFrame(CFrame.new(1850, 15, -1120))
 end)
 CreateButton(TeleportPage, "Teleport", "Ilha Gigachad", function()
-    print("[Vortex] Teleporte: Gigachad Island")
-end)
-
-CreateSection(TeleportPage, "Teleporte de NPCs")
-CreateButton(TeleportPage, "Teleport", "NPC de Quest Principal", function()
-    print("[Vortex] Teleporte: Quest NPC")
-end)
-CreateButton(TeleportPage, "Teleport", "NPC de Venda de Armas", function()
-    print("[Vortex] Teleporte: Vendedor de Armas")
+    TeleportToCFrame(CFrame.new(-3200, 15, 1450))
 end)
 
 --- ABA: SETTINGS ---
 CreateSection(SettingsPage, "Configurações da Interface")
-CreateToggle(SettingsPage, "Settings", "Remover Efeitos Visuais (Lag Fix)", false, function(v)
-    print("[Vortex] Lag Fix:", v)
-end)
 CreateButton(SettingsPage, "Settings", "Destruir UI e Desconectar Script", function()
+    if LoadedModules.Farm then
+        LoadedModules.Farm.SetFarmState(false)
+    end
+    if LoadedModules.Combat then
+        LoadedModules.Combat.SetAutoClick(false)
+    end
     if _G.VortexCleanUp then
         _G.VortexCleanUp()
     end
     if ScreenGui then
         ScreenGui:Destroy()
     end
-    print("[Vortex] Script encerrado.")
+    print("[Vortex Hub] Encerramento completo concluído.")
 end)
 
 --========================================================--
@@ -727,4 +761,20 @@ Connect(MinimizeBtn.Activated, function()
 end)
 
 SelectPage("Home")
+
+--========================================================--
+-- 8. INTEGRAÇÃO E INICIALIZAÇÃO VIA LOADER
+--========================================================--
+
+function MainModule.Init(Modules)
+    if type(Modules) == "table" then
+        LoadedModules.Farm = Modules.Farm
+        LoadedModules.Combat = Modules.Combat
+        LoadedModules.Bypass = Modules.Bypass
+    end
+    print("[Vortex Hub] Módulo 1 (Main) conectado com os módulos de lógica!")
+end
+
 print("[Vortex Hub] Módulo 1 (Interface Completa) carregado!")
+
+return MainModule
