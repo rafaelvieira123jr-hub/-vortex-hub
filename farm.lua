@@ -1,10 +1,13 @@
 --[[
-    VORTEX HUB - FARM MODULE
+    VORTEX HUB - FARM MODULE v2
     Arquivo: farm.lua
     
-    Auto Farm com Floppa Sword
-    Sistema de resgate de código
-    Teleporte entre ilhas
+    Auto Farm para Meme Sea
+    - Auto Pick items/código
+    - Auto Clip (atravessar paredes)
+    - Attack inimigos automático
+    - Teleporte entre ilhas
+    - Auto Quest completion
 ]]
 
 local FarmModule = {}
@@ -22,13 +25,14 @@ local HRP = Character:WaitForChild("HumanoidRootPart")
 
 local Config = {
     FarmActive = false,
-    AttackRange = 30,
-    AttackCooldown = 0.5,
-    SwordName = "Auto Floppa",
-    TargetDistance = 50,
+    AutoPickActive = false,
+    AutoClipActive = false,
+    AttackRange = 40,
+    AttackCooldown = 0.3,
+    PickRange = 35,
+    TargetDistance = 60,
     AutoEquip = true,
-    AutoResgate = false,
-    CurrentIsland = "Start"
+    CurrentIsland = "Spawn"
 }
 
 local State = {
@@ -36,7 +40,9 @@ local State = {
     CurrentTarget = nil,
     IsEquipped = false,
     FarmingActive = false,
-    CollectedItems = 0
+    AutoPickActive = false,
+    CollectedItems = 0,
+    ClipMode = false
 }
 
 --========================================================--
@@ -48,37 +54,88 @@ local IslandCoordinates = {
     ["Popcat Island"] = CFrame.new(-1230, 15, -3150),
     ["Cheems Island"] = CFrame.new(1850, 15, -1120),
     ["Gigachad Island"] = CFrame.new(-3200, 15, 1450),
-    ["Start"] = CFrame.new(0, 50, 0)
+    ["Snow Island"] = CFrame.new(100, 50, 100),
+    ["Sand Island"] = CFrame.new(-1500, 50, -500),
+    ["Gorilla Island"] = CFrame.new(2000, 50, 2000),
+    ["Moai Island"] = CFrame.new(-2500, 50, -1500),
+    ["Pumpkin Island"] = CFrame.new(500, 50, -2000),
+    ["Sus Island"] = CFrame.new(-3500, 50, 500),
+    ["PvP Arena"] = CFrame.new(1000, 50, 1500),
+    ["MrBeast Island"] = CFrame.new(2500, 50, -2500),
+    ["Spawn"] = CFrame.new(0, 50, 0)
 }
 
 --========================================================--
--- FUNCÃO: EQUIPAR FLOPPA SWORD
+-- FUNÇÃO: AUTO PICK (PEGAR ITEMS/CÓDIGO)
 --========================================================--
 
-local function EquipFloppaSword()
-    if State.IsEquipped then
-        return true
-    end
+local function AutoPickItems()
+    if not HRP then return end
 
-    local backpack = LocalPlayer:WaitForChild("Backpack")
-    local sword = backpack:FindFirstChild(Config.SwordName)
+    local pickRadius = Config.PickRange
     
-    if not sword then
-        print("[Vortex Hub Farm] Floppa Sword não encontrada no inventário")
-        return false
+    -- Procura por items no workspace
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if not obj:IsDescendantOf(Character) and obj:IsA("BasePart") then
+            local distance = (obj.Position - HRP.Position).Magnitude
+            
+            if distance < pickRadius then
+                -- Verifica se é item por nome
+                if obj.Name:match("Code") or obj.Name:match("Coin") or 
+                   obj.Name:match("Item") or obj.Name:match("Drop") then
+                    
+                    pcall(function()
+                        -- Move para perto do item
+                        HRP.CFrame = obj.CFrame + obj.CFrame.LookVector * 3
+                        task.wait(0.1)
+                        
+                        -- Tenta usar ClickDetector se existir
+                        if obj:FindFirstChild("ClickDetector") then
+                            obj.ClickDetector:FireServer()
+                        end
+                        
+                        State.CollectedItems = State.CollectedItems + 1
+                    end)
+                end
+            end
+        end
     end
-
-    pcall(function()
-        sword.Parent = Character
-        State.IsEquipped = true
-        print("[Vortex Hub Farm] Floppa Sword equipada!")
-    end)
-
-    return State.IsEquipped
 end
 
 --========================================================--
--- FUNÇÃO: ENCONTRAR INIMIGOS PRÓXIMOS
+-- FUNÇÃO: AUTO CLIP (ATRAVESSAR PAREDES)
+--========================================================--
+
+local function EnableAutoClip(enabled)
+    State.ClipMode = enabled
+    
+    if enabled then
+        print("[Vortex Hub Farm] Auto Clip ativado!")
+        
+        -- Desabilita colisão com partes
+        for _, part in pairs(Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                pcall(function()
+                    part.CanCollide = false
+                end)
+            end
+        end
+    else
+        print("[Vortex Hub Farm] Auto Clip desativado!")
+        
+        -- Re-habilita colisão
+        for _, part in pairs(Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                pcall(function()
+                    part.CanCollide = true
+                end)
+            end
+        end
+    end
+end
+
+--========================================================--
+-- FUNÇÃO: ENCONTRAR INIMIGOS (DO WORKSPACE)
 --========================================================--
 
 local function FindNearestEnemy()
@@ -87,21 +144,22 @@ local function FindNearestEnemy()
     local nearestEnemy = nil
     local nearestDistance = Config.TargetDistance
 
-    for _, enemy in pairs(workspace:FindPartiesInRegion3(
-        Region3.new(HRP.Position - Vector3.new(Config.TargetDistance, Config.TargetDistance, Config.TargetDistance),
-                    HRP.Position + Vector3.new(Config.TargetDistance, Config.TargetDistance, Config.TargetDistance))
-            :ExpandToGrid(4),
-        nil,
-        100
-    )) do
-        local character = enemy.Parent
-        
-        if character and character ~= Character and character:FindFirstChild("Humanoid") then
-            local distance = (character:FindFirstChild("HumanoidRootPart").Position - HRP.Position).Magnitude
-            
-            if distance < nearestDistance and character:FindFirstChild("Humanoid").Health > 0 then
-                nearestEnemy = character
-                nearestDistance = distance
+    -- Procura na pasta Monster
+    local monsterFolder = workspace:FindFirstChild("Monster")
+    if monsterFolder then
+        for _, monster in pairs(monsterFolder:GetChildren()) do
+            if monster:FindFirstChild("Humanoid") and monster:FindFirstChild("HumanoidRootPart") then
+                local humanoid = monster:FindFirstChild("Humanoid")
+                local enemyHRP = monster:FindFirstChild("HumanoidRootPart")
+                
+                if humanoid.Health > 0 and enemyHRP then
+                    local distance = (enemyHRP.Position - HRP.Position).Magnitude
+                    
+                    if distance < nearestDistance then
+                        nearestEnemy = monster
+                        nearestDistance = distance
+                    end
+                end
             end
         end
     end
@@ -114,125 +172,65 @@ end
 --========================================================--
 
 local function AttackEnemy(enemy)
-    if not enemy or not enemy:FindFirstChild("Humanoid") then
+    if not enemy or not enemy:FindFirstChild("Humanoid") or not enemy:FindFirstChild("HumanoidRootPart") then
         return
     end
 
     local currentTime = tick()
     
     if currentTime - State.LastAttackTime >= Config.AttackCooldown then
-        -- Simula ataque (muda CFrame para perto do inimigo)
         local enemyHRP = enemy:FindFirstChild("HumanoidRootPart")
+        local distance = (enemyHRP.Position - HRP.Position).Magnitude
         
-        if enemyHRP and (enemyHRP.Position - HRP.Position).Magnitude <= Config.AttackRange then
-            HRP.CFrame = enemyHRP.CFrame + enemyHRP.CFrame.LookVector * 5
+        if distance <= Config.AttackRange then
+            -- Move para perto do inimigo
+            local attackPos = enemyHRP.Position + (HRP.Position - enemyHRP.Position).Unit * 5
+            HRP.CFrame = CFrame.new(attackPos)
             
-            -- Tenta usar ferramenta para atacar
-            local tool = Character:FindFirstChild(Config.SwordName)
-            if tool and tool:FindFirstChild("Handle") then
-                -- Simula swing da espada
+            -- Tenta usar skill/ataque
+            pcall(function()
+                -- Simula ataque por MouseButton1
+                local mouse = LocalPlayer:GetMouse()
+                mouse:Fire()
+            end)
+            
+            State.LastAttackTime = currentTime
+        end
+    end
+end
+
+--========================================================--
+-- FUNÇÃO: AUTO QUEST (COMPLETA QUESTS)
+--========================================================--
+
+local function AutoCompleteQuest()
+    local questFolder = workspace:FindFirstChild("Location")
+    if not questFolder then return end
+    
+    local questLocations = questFolder:FindFirstChild("QuestLocaion")
+    if not questLocations then return end
+    
+    for _, questPart in pairs(questLocations:GetChildren()) do
+        if questPart:IsA("BasePart") then
+            local distance = (questPart.Position - HRP.Position).Magnitude
+            
+            if distance < 50 then
                 pcall(function()
-                    if tool:FindFirstChild("Activated") then
-                        tool.Activated:Fire()
+                    HRP.CFrame = questPart.CFrame + questPart.CFrame.LookVector * 3
+                    task.wait(0.2)
+                    
+                    -- Tenta interagir se tiver ProximityPrompt
+                    if questPart:FindFirstChild("ProximityPrompt") then
+                        questPart.ProximityPrompt:InputBegan(Enum.UserInputType.Gamepad1, false)
                     end
                 end)
             end
-            
-            State.LastAttackTime = currentTime
-            print("[Vortex Hub Farm] Atacando: " .. enemy.Name)
         end
     end
 end
 
 --========================================================--
--- FUNÇÃO: COLETAR ITEMS/CÓDIGO
---========================================================--
-
-local function CollectDrops()
-    local character = LocalPlayer.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
-
-    local hrp = character:FindFirstChild("HumanoidRootPart")
-
-    -- Procura por drops/coins/itens na área
-    for _, item in pairs(workspace:FindPartiesInRegion3(
-        Region3.new(hrp.Position - Vector3.new(20, 20, 20),
-                    hrp.Position + Vector3.new(20, 20, 20))
-            :ExpandToGrid(4),
-        nil,
-        100
-    )) do
-        if item.Name:match("Drop") or item.Name:match("Coin") or item.Name:match("Code") then
-            pcall(function()
-                item.Parent = character or character.Backpack
-                State.CollectedItems = State.CollectedItems + 1
-            end)
-        end
-    end
-end
-
---========================================================--
--- FUNÇÃO: TELEPORTAR PARA ILHA
---========================================================--
-
-local function TeleportToIsland(islandName)
-    if not IslandCoordinates[islandName] then
-        warn("[Vortex Hub Farm] Ilha não encontrada: " .. islandName)
-        return false
-    end
-
-    local character = LocalPlayer.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then
-        return false
-    end
-
-    pcall(function()
-        character:FindFirstChild("HumanoidRootPart").CFrame = IslandCoordinates[islandName]
-        Config.CurrentIsland = islandName
-        print("[Vortex Hub Farm] Teleportado para: " .. islandName)
-        return true
-    end)
-
-    return true
-end
-
---========================================================--
--- FUNÇÃO: AUTO RESGATE DE CÓDIGO
---========================================================--
-
-local function AutoResgate()
-    if not Config.AutoResgate then return end
-
-    local character = LocalPlayer.Character
-    if not character then return end
-
-    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-    if not humanoidRootPart then return end
-
-    -- Procura por chests, NPCs ou áreas de resgate
-    for _, obj in pairs(workspace:FindPartiesInRegion3(
-        Region3.new(humanoidRootPart.Position - Vector3.new(25, 25, 25),
-                    humanoidRootPart.Position + Vector3.new(25, 25, 25))
-            :ExpandToGrid(4),
-        nil,
-        100
-    )) do
-        if obj.Name:match("Chest") or obj.Name:match("Quest") or obj.Name:match("Code") then
-            pcall(function()
-                -- Tenta interagir com o objeto
-                humanoidRootPart.CFrame = obj.CFrame + obj.CFrame.LookVector * 3
-                
-                -- Se tiver ClickDetector, clica
-                if obj:FindFirstChild("ClickDetector") then
-                    obj.ClickDetector:FireServer()
-                end
-            end)
-        end
-    end
-end
-
---========================================================--
--- FUNÇÃO: AUTO FARM LOOP
+-- FUNÇÃO: LOOP PRINCIPAL DO FARM
 --========================================================--
 
 local function AutoFarmLoop()
@@ -247,27 +245,29 @@ local function AutoFarmLoop()
 
         if not humanoid or not hrp or humanoid.Health <= 0 then break end
 
-        -- Equipar espada se necessário
-        if Config.AutoEquip and not State.IsEquipped then
-            EquipFloppaSword()
+        -- Auto Pick
+        if State.AutoPickActive then
+            AutoPickItems()
+        end
+
+        -- Auto Clip (mantém desabilitado)
+        if State.ClipMode then
+            EnableAutoClip(true)
         end
 
         -- Encontrar e atacar inimigo
         local target = FindNearestEnemy()
         if target then
             AttackEnemy(target)
+        else
+            -- Se não tem inimigo perto, tenta completar quest
+            AutoCompleteQuest()
         end
-
-        -- Coletar drops
-        CollectDrops()
-
-        -- Auto resgate
-        AutoResgate()
     end
 end
 
 --========================================================--
--- FUNÇÃO: INICIAR FARM
+-- FUNÇÕES PÚBLICAS
 --========================================================--
 
 function FarmModule.SetFarmState(enabled)
@@ -282,43 +282,51 @@ function FarmModule.SetFarmState(enabled)
     end
 end
 
---========================================================--
--- FUNÇÃO: CONFIGURAR MODULE DE COMBATE
---========================================================--
+function FarmModule.SetAutoPickState(enabled)
+    State.AutoPickActive = enabled
+    print("[Vortex Hub Farm] Auto Pick: " .. (enabled and "ON" or "OFF"))
+end
+
+function FarmModule.SetAutoClipState(enabled)
+    State.ClipMode = enabled
+    EnableAutoClip(enabled)
+end
 
 function FarmModule.SetCombatModule(combatModule)
     FarmModule.CombatModule = combatModule
     print("[Vortex Hub Farm] Combat Module conectado!")
 end
 
---========================================================--
--- FUNÇÕES AUXILIARES
---========================================================--
-
 function FarmModule.TeleportToIsland(islandName)
-    return TeleportToIsland(islandName)
-end
+    if not IslandCoordinates[islandName] then
+        warn("[Vortex Hub Farm] Ilha não encontrada: " .. islandName)
+        return false
+    end
 
-function FarmModule.EquipSword()
-    return EquipFloppaSword()
-end
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then
+        return false
+    end
 
-function FarmModule.SetAutoEquip(enabled)
-    Config.AutoEquip = enabled
-    print("[Vortex Hub Farm] Auto Equip: " .. (enabled and "ON" or "OFF"))
-end
+    pcall(function()
+        character:FindFirstChild("HumanoidRootPart").CFrame = IslandCoordinates[islandName]
+        Config.CurrentIsland = islandName
+        print("[Vortex Hub Farm] Teleportado para: " .. islandName)
+    end)
 
-function FarmModule.SetAutoResgate(enabled)
-    Config.AutoResgate = enabled
-    print("[Vortex Hub Farm] Auto Resgate: " .. (enabled and "ON" or "OFF"))
+    return true
 end
 
 function FarmModule.GetCollectedItems()
     return State.CollectedItems
 end
 
-function FarmModule.Config()
-    return Config
+function FarmModule.SetTargetDistance(distance)
+    Config.TargetDistance = tonumber(distance) or 60
+end
+
+function FarmModule.SetAttackSpeed(speed)
+    Config.AttackCooldown = 1 / (tonumber(speed) or 3)
 end
 
 --========================================================--
@@ -342,6 +350,11 @@ end)
 -- PRINT DE INICIALIZAÇÃO
 --========================================================--
 
-print("[Vortex Hub] Farm Module carregado com sucesso!")
+print("[Vortex Hub] Farm Module v2 carregado com sucesso!")
+print("[Vortex Hub] Recursos disponíveis:")
+print("  - Auto Farm (Attack + Pick + Quest)")
+print("  - Auto Clip (Atravessar paredes)")
+print("  - Teleporte para 13 ilhas")
+print("  - Auto Pick de itens/código")
 
 return FarmModule
