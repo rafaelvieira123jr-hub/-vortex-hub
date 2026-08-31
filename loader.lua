@@ -1,5 +1,5 @@
 --[[
-    VORTEX HUB - LOADER MODULE
+    VORTEX HUB - LOADER DEFINITIVO (CACHE BYPASS)
     Arquivo: loader.lua
 --]]
 
@@ -20,28 +20,31 @@ if getgenv().VortexHub.Loaded then
 end
 
 local function LoadModule(moduleName)
-    local url = BaseURL .. moduleName
+    -- Adiciona timestamp no final da URL para burlar o cache do HttpGet
+    local url = BaseURL .. moduleName .. "?nocache=" .. tostring(os.time())
+    
     local success, response = pcall(function()
         return game:HttpGet(url)
     end)
 
-    if not success or not response or response == "404: Not Found" or response == "" then
-        warn("[Vortex Hub] Falha ao baixar o arquivo: " .. moduleName)
+    if not success or not response or response == "404: Not Found" or #response < 10 then
+        warn("[Vortex Hub Error] Falha ao baixar o arquivo: " .. moduleName)
         return nil
     end
 
     local codeFunction, compileErr = loadstring(response)
     if not codeFunction then
-        warn("[Vortex Hub] Erro de sintaxe em " .. moduleName .. ": " .. tostring(compileErr))
+        warn("[Vortex Hub Error] Erro de sintaxe em " .. moduleName .. ": " .. tostring(compileErr))
         return nil
     end
 
     local execSuccess, resultModule = pcall(codeFunction)
     if not execSuccess then
-        warn("[Vortex Hub] Erro ao executar " .. moduleName .. ": " .. tostring(resultModule))
+        warn("[Vortex Hub Error] Erro ao executar " .. moduleName .. ": " .. tostring(resultModule))
         return nil
     end
 
+    print("[Vortex Hub] Módulo '" .. moduleName .. "' carregado com sucesso!")
     return resultModule
 end
 
@@ -61,5 +64,5 @@ if mainModule and type(mainModule.Init) == "function" then
     getgenv().VortexHub.Loaded = true
     print("[Vortex Hub] Carregado com sucesso!")
 else
-    warn("[Vortex Hub] Falha ao inicializar o main.lua!")
+    warn("[Vortex Hub] Falha ao inicializar a interface (main.lua)!")
 end
