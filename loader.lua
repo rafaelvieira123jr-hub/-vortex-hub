@@ -1,39 +1,80 @@
 --[[
-    VORTEX HUB - LOADER MODULE (MÓDULO 5: INJETOR E CARREGADOR DE MÓDULOS)
+    VORTEX HUB - LOADER MODULE (MÓDULO 5 REVISADO)
     Arquivo: loader.lua
-    Descrição: Carregador remoto do GitHub, inicialização de dependências e gerenciamento de execução.
 --]]
 
---========================================================--
--- 1. CONFIGURAÇÃO DO REPOSITÓRIO GITHUB
---========================================================--
-
-local local GitHubUser = "rafaelvieira123jr-hub"
+local GitHubUser = "rafaelvieira123jr-hub"
 local Repository = "-vortex-hub"
 local Branch = "main"
 
-
 local BaseURL = string.format("https://raw.githubusercontent.com/%s/%s/%s/", GitHubUser, Repository, Branch)
 
--- Tabela global para armazenar referências e instâncias dos módulos
 getgenv().VortexHub = getgenv().VortexHub or {
     Loaded = false,
     Modules = {},
     Connections = {}
 }
 
--- Prevent multiple executions
 if getgenv().VortexHub.Loaded then
-    warn("[Vortex Hub] O script já está em execução no momento.")
+    warn("[Vortex Hub] O script já está em execução!")
     return
 end
 
---========================================================--
--- 2. FUNÇÃO DE DOWNLOAD E COMPILAÇÃO REMOTA
---========================================================--
-
 local function LoadModule(moduleName)
     local url = BaseURL .. moduleName
+    local success, response = pcall(function()
+        return game:HttpGet(url)
+    end)
+
+    if not success or not response or response == "404: Not Found" or response == "" then
+        warn("[Vortex Hub Error] Não foi possível baixar o módulo: " .. moduleName)
+        return nil
+    end
+
+    local codeFunction, compileErr = loadstring(response)
+    if not codeFunction then
+        warn(string.format("[Vortex Hub Error] Erro de sintaxe no módulo '%s': %s", moduleName, tostring(compileErr)))
+        return nil
+    end
+
+    local execSuccess, resultModule = pcall(codeFunction)
+    if not execSuccess then
+        warn(string.format("[Vortex Hub Error] Erro ao executar o módulo '%s': %s", moduleName, tostring(resultModule)))
+        return nil
+    end
+
+    print(string.format("[Vortex Hub] Módulo '%s' carregado com sucesso!", moduleName))
+    return resultModule
+end
+
+local function InitializeVortexHub()
+    print("[Vortex Hub] Baixando módulos do GitHub...")
+
+    local bypassModule = LoadModule("bypass.lua")
+    getgenv().VortexHub.Modules.Bypass = bypassModule
+
+    local farmModule = LoadModule("farm.lua")
+    getgenv().VortexHub.Modules.Farm = farmModule
+
+    local combatModule = LoadModule("combat.lua")
+    getgenv().VortexHub.Modules.Combat = combatModule
+
+    local mainModule = LoadModule("main.lua")
+    getgenv().VortexHub.Modules.Main = mainModule
+
+    if mainModule and type(mainModule.Init) == "function" then
+        mainModule.Init({
+            Farm = farmModule,
+            Combat = combatModule,
+            Bypass = bypassModule
+        })
+    end
+
+    getgenv().VortexHub.Loaded = true
+    print("[Vortex Hub] Inicialização concluída!")
+end
+
+pcall(InitializeVortexHub)
     local success, response = pcall(function()
         return game:HttpGet(url)
     end)
